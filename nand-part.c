@@ -147,7 +147,7 @@ void checkmbrs(int fd)
 			if (mbrs[i])
 				_free_mbr(mbrs[i]);
 		}
-		return;
+                return;
 	}
 
 	for(part_cnt = 0; part_cnt < mbr->PartCount && part_cnt < MAX_PART_COUNT; part_cnt++)
@@ -174,59 +174,28 @@ int writembrs(int fd, char names[][MAX_NAME], __u32 *lens, int nparts)
 	int i;
 	__u32 start;
 	char yn = 'n';
-	MBR *mbrs[MBR_COPY_NUM];
-	MBR *mbr = NULL;
-	FILE *backup;
-
-	memset((void *) mbrs, 0, sizeof(mbrs));
-	for (i = 0; i < MBR_COPY_NUM; i++) {
-		mbrs[i] = _get_mbr(fd, i);
-		if (mbrs[i])
-			mbr = mbrs[i];
-	}
-	if (!mbr) {
-		printf("all partition tables are bad!\n");
-		for (i = 0; i < MBR_COPY_NUM; i++) {
-			if (mbrs[i])
-				_free_mbr(mbrs[i]);
-		}
-		return 0;
-	}
-	// back up mbr data
-	backup = fopen("nand_mbr.backup", "w");
-	if (!backup) {
-		printf("can't open nand_mbr.backup to back up mbr data\n");
-		for (i = 0; i < MBR_COPY_NUM; i++) {
-			if (mbrs[i])
-				_free_mbr(mbrs[i]);
-		}
-		return 0;
-	}
-
-	for(part_cnt = 1; part_cnt < mbr->PartCount && part_cnt < MAX_PART_COUNT; part_cnt++)
+	MBR *mbr = malloc(sizeof(MBR));
+	if(mbr == NULL)
 	{
-		if((mbr->array[part_cnt].user_type == 2) || (mbr->array[part_cnt].user_type == 0))
-		{
-			fprintf(backup, "'%s %d' ", mbr->array[part_cnt].name,
-			                  mbr->array[part_cnt].lenlo);
-		}
+		printf("%s : request memory fail\n",__FUNCTION__);
+		return -1;
 	}
-	fprintf(backup, "\n");
-	fclose(backup);
-
-	// don't muck with first partition
-	mbr->PartCount = nparts + 1;
-	start = mbr->array[0].addrlo + mbr->array[0].lenlo;
+	memset(mbr, 0, sizeof(MBR));
+	mbr->version = 0x100;
+	memcpy(mbr->magic, "softw311", 8);
+	mbr->copy = 4;
+	mbr->PartCount = nparts;
+	start = 8;
 	for(i = 0; i < nparts; i++) {
-		strcpy((char *)mbr->array[i+1].name, names[i]);
-		strcpy((char *)mbr->array[i+1].classname, "DISK");
-		memset(mbr->array[i+1].res, 0, sizeof(mbr->array[i+1].res));
-		mbr->array[i+1].user_type = 0;
-		mbr->array[i+1].ro = 0;
-		mbr->array[i+1].addrhi = 0;
-		mbr->array[i+1].lenhi = 0;
-		mbr->array[i+1].addrlo = start;
-		mbr->array[i+1].lenlo = lens[i];
+		strcpy((char *)mbr->array[i].name, names[i]);
+		strcpy((char *)mbr->array[i].classname, "DISK");
+		memset(mbr->array[i].res, 0, sizeof(mbr->array[i].res));
+		mbr->array[i].user_type = 0;
+		mbr->array[i].ro = 0;
+		mbr->array[i].addrhi = 0;
+		mbr->array[i].lenhi = 0;
+		mbr->array[i].addrlo = start;
+		mbr->array[i].lenlo = lens[i];
 		start += lens[i];
 	}
 
@@ -241,10 +210,6 @@ int writembrs(int fd, char names[][MAX_NAME], __u32 *lens, int nparts)
 						mbr->array[part_cnt].addrlo,
 						mbr->array[part_cnt].lenlo);
 		}
-	}
-	for (i = 0; i < MBR_COPY_NUM; i++) {
-		if (mbrs[i])
-			_free_mbr(mbrs[i]);
 	}
 	printf("%d partitions\n", part_cnt);
 	printf("\nwrite new partition tables? (Y/N)\n");
@@ -283,7 +248,7 @@ int main (int argc, char **argv)
 	}
 	fd = open(nand, O_RDWR);
 	if (fd < 0) {
-		printf("usage: %s nand-device \'name2 len2\' [\'name3 len3\'] ...\n", cmd);
+		printf("usage: %s nand-device \'name1 len1\' [\'name2 len2\'] ...\n", cmd);
 		return -1;
 	}
 
@@ -292,7 +257,7 @@ int main (int argc, char **argv)
 		for (i = 0; i < argc; i++) {
 			if (sscanf(argv[i], "%s %d", names[i], &lens[i]) != 2) {
 				printf("bad 'name len' argument\n");
-				printf("usage: %s nand-device \'name2 len2\' [\'name3 len3\'] ...\n", cmd);
+				printf("usage: %s nand-device \'name1 len1\' [\'name2 len2\'] ...\n", cmd);
 				close(fd);
 				return -3;
 			}
@@ -301,9 +266,9 @@ int main (int argc, char **argv)
 
 	checkmbrs(fd);
 
-	if (argc > MAX_PART_COUNT - 1) {
-		printf("too many partitions specified (MAX 14)\n");
-		printf("usage: %s nand-device \'name2 len2\' [\'name3 len3\'] ...\n", cmd);
+	if (argc > MAX_PART_COUNT) {
+		printf("too many partitions specified (MAX 15)\n");
+		printf("usage: %s nand-device \'name1 len1\' [\'name2 len2\'] ...\n", cmd);
 		close(fd);
 		return -2;
 	}
